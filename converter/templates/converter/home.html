@@ -1,0 +1,141 @@
+{% extends 'converter/base.html' %}
+{% load widget_tweaks %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto" x-data="uploadForm()">
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h1 class="text-2xl font-bold text-center mb-6">Convert Video to MP3</h1>
+        
+        <form @submit.prevent="handleSubmit" class="space-y-4">
+            {% csrf_token %}
+            
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center"
+                 @dragover.prevent="dragActive = true"
+                 @dragleave.prevent="dragActive = false"
+                 @drop.prevent="handleDrop($event)"
+                 :class="{ 'border-blue-500 bg-blue-50': dragActive }">
+                
+                <div class="space-y-2">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <div class="text-gray-600">
+                        <label for="id_video_file" class="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500">
+                            <span>Upload a file</span>
+                            <input type="file" 
+                                   id="id_video_file" 
+                                   name="video_file" 
+                                   class="hidden" 
+                                   accept=".mp4"
+                                   @change="handleFileInput($event)">
+                        </label>
+                        <p class="pl-1">or drag and drop</p>
+                    </div>
+                    <p class="text-xs text-gray-500">MP4 files only (max 100MB)</p>
+                </div>
+            </div>
+
+            <div x-show="selectedFile" class="text-sm text-gray-600">
+                Selected file: <span x-text="selectedFile.name"></span>
+            </div>
+
+            <div x-show="error" class="text-red-500 text-sm" x-text="error"></div>
+
+            <button type="submit" 
+                    class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+                    :disabled="!selectedFile || uploading">
+                <span x-show="!uploading">Convert to MP3</span>
+                <span x-show="uploading" class="flex items-center justify-center">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Converting...
+                </span>
+            </button>
+        </form>
+
+        <div x-show="downloadUrl" class="mt-4 p-4 bg-green-50 rounded-md">
+            <p class="text-green-800">Conversion successful!</p>
+            <a :href="downloadUrl" 
+               class="mt-2 inline-block bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+               download>
+                Download MP3
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+function uploadForm() {
+    return {
+        dragActive: false,
+        selectedFile: null,
+        uploading: false,
+        error: null,
+        downloadUrl: null,
+
+        handleDrop(e) {
+            this.dragActive = false;
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                this.handleFile(file);
+            }
+        },
+
+        handleFileInput(event) {
+            const file = event.target.files[0];
+            if (file) {
+                this.handleFile(file);
+            }
+        },
+
+        handleFile(file) {
+            if (!file.name.endsWith('.mp4')) {
+                this.error = 'Please upload an MP4 file.';
+                return;
+            }
+            if (file.size > 100 * 1024 * 1024) {
+                this.error = 'File size must be less than 100MB.';
+                return;
+            }
+            this.selectedFile = file;
+            this.error = null;
+            this.downloadUrl = null;
+        },
+
+        async handleSubmit() {
+            if (!this.selectedFile) return;
+
+            this.uploading = true;
+            this.error = null;
+            this.downloadUrl = null;
+
+            const formData = new FormData();
+            formData.append('video_file', this.selectedFile);
+            formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+            try {
+                const response = await fetch('{% url "converter:upload_video" %}', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    this.downloadUrl = data.download_url;
+                } else {
+                    this.error = data.message || 'An error occurred during conversion.';
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                this.error = 'An error occurred while uploading the file.';
+            } finally {
+                this.uploading = false;
+            }
+        }
+    }
+}
+</script>
+{% endblock %} 

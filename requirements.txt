@@ -1,0 +1,5 @@
+Django==5.0.2
+django-widget-tweaks==1.5.0
+moviepy==1.0.3
+Pillow==10.2.0
+python-dotenv==1.0.1 
